@@ -1,0 +1,16 @@
+{
+  "name": "studygem-production",
+  "version": "1.0.0",
+  "description": "StudyGem Academic Progress Tracker with a Vercel serverless backend.",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Use Vercel CLI 'vercel dev' for local development\"",
+    "build": "echo \"Frontend has no build step; backend is built by Vercel\""
+  },
+  "dependencies": {
+    "mysql2": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2"
+  }
+}

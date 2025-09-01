@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const { error, count } = await supabaseAdmin
             .from('users')
-            .select('user_id', { count: 'exact', head: true })
+            .select('*', { count: 'exact', head: true })
             .eq('user_id', id);
             
         if (error) {

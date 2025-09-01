@@ -87,7 +87,7 @@ const OnboardingScreen: React.FC = () => {
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleLoginSubmit()}
-                placeholder="SG-XXXXX"
+                placeholder="XXXXX"
                 className={`${inputClasses} uppercase text-center tracking-widest font-mono`}
                 autoFocus
             />

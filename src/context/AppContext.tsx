@@ -98,23 +98,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNotification({ message, id: Date.now() });
     };
 
-    const generateUniqueId = async (name: string, isOfflineMode: boolean): Promise<string | null> => {
+    const generateUniqueId = async (name: string, rollNumber: string, isOfflineMode: boolean): Promise<string | null> => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         let id = '';
         let isUnique = false;
         let attempts = 0;
-        const maxAttempts = 20; // Increased attempts for more robustness
+        const maxAttempts = 50;
 
         while (!isUnique && attempts < maxAttempts) {
             attempts++;
-            const namePart = name.substring(0, 2).toUpperCase().padEnd(2, 'X');
             
+            const namePart = name.trim().toUpperCase().substring(0, 2).padEnd(2, 'X');
+            const rollPart = rollNumber.trim().replace(/[^0-9]/g, '').slice(-1) || '0';
+
             let randomPart = '';
-            for (let i = 0; i < 3; i++) { // Increased random part to 3 chars
+            for (let i = 0; i < 2; i++) {
                 randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
             }
-
-            id = `SG-${namePart}${randomPart}`;
+            
+            id = `${namePart}${rollPart}${randomPart}`;
 
             try {
                 const isTaken = await apiService.isUserIdTaken(id, isOfflineMode);
@@ -196,7 +198,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const createUser = async (name: string, userClass: string, rollNumber: string) => {
         setIsLoading(true);
-        const userId = await generateUniqueId(name, isOffline);
+        const userId = await generateUniqueId(name, rollNumber, isOffline);
 
         if (!userId) {
             showNotification("Error: Could not generate a unique ID. Please try again.");

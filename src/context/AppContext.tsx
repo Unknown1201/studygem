@@ -108,11 +108,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         while (!isUnique && attempts < maxAttempts) {
             attempts++;
             
-            const namePart = name.trim().toUpperCase().substring(0, 2).padEnd(2, 'X');
-            const rollPart = rollNumber.trim().replace(/[^0-9]/g, '').slice(-1) || '0';
+            // Using 1 char from name, 1 from roll, and 3 random chars to greatly increase uniqueness
+            const namePart = (name.trim().toUpperCase().substring(0, 1) || 'X');
+            const rollPart = (rollNumber.trim().replace(/[^0-9]/g, '').slice(-1) || '0');
 
             let randomPart = '';
-            for (let i = 0; i < 2; i++) {
+            for (let i = 0; i < 3; i++) {
                 randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
             }
             

@@ -1,8 +1,6 @@
 
 import React from 'react';
-
-// Recharts is loaded from a CDN and available on the window object.
-const { ResponsiveContainer, RadialBarChart, RadialBar, PolarAngleAxis } = (window as any).Recharts;
+import { ResponsiveContainer, RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
 
 interface ProgressCircleProps {
     progress: number;

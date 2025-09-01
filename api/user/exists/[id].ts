@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../../lib/supabaseAdmin';
+import pool from '../../lib/mysql';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
@@ -13,17 +13,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ message: 'User ID is required.' });
         }
 
-        const { data, error } = await supabaseAdmin
-            .from('users')
-            .select('user_id')
-            .eq('user_id', id)
-            .limit(1);
+        const sql = `SELECT user_id FROM users WHERE user_id = ? LIMIT 1`;
+        const [rows] = await pool.query(sql, [id]);
             
-        if (error) {
-            throw error;
-        }
+        const exists = Array.isArray(rows) && rows.length > 0;
 
-        return res.status(200).json({ exists: data !== null && data.length > 0 });
+        return res.status(200).json({ exists });
 
     } catch (error: any) {
         console.error('Error checking user ID:', error);

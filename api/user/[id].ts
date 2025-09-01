@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../lib/supabaseAdmin';
+import pool from '../lib/mysql';
 
 async function handleGet(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query;
@@ -8,16 +8,13 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
     }
 
     // Fetch user data
-    const { data: userRow, error: userError } = await supabaseAdmin
-        .from('users')
-        .select('user_id, name, class, roll_number')
-        .eq('user_id', id)
-        .single();
-    
-    if (userError || !userRow) {
-        console.error('Supabase user fetch error:', userError);
+    const userSql = `SELECT user_id, name, class, roll_number FROM users WHERE user_id = ?`;
+    const [userRows]: any[] = await pool.query(userSql, [id]);
+
+    if (userRows.length === 0) {
         return res.status(404).json({ message: 'User not found.' });
     }
+    const userRow = userRows[0];
     const userData = {
         userId: userRow.user_id,
         name: userRow.name,
@@ -26,16 +23,10 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
     };
 
     // Fetch progress data
-    const { data: progressRows, error: progressError } = await supabaseAdmin
-        .from('progress')
-        .select('task_id')
-        .eq('user_id', id);
+    const progressSql = `SELECT task_id FROM progress WHERE user_id = ?`;
+    const [progressRows]: any[] = await pool.query(progressSql, [id]);
 
-    if (progressError) {
-        // Log the error but don't fail the request, just return empty progress
-        console.error('Supabase progress fetch error:', progressError);
-    }
-    const progress = (progressRows || []).reduce((acc: any, row: any) => {
+    const progress = progressRows.reduce((acc: any, row: any) => {
         acc[row.task_id] = true;
         return acc;
     }, {});
@@ -54,17 +45,10 @@ async function handlePut(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
     }
     
-    const { data, error } = await supabaseAdmin
-        .from('users')
-        .update({ name: name, class: userClass, roll_number: rollNumber })
-        .eq('user_id', id)
-        .select(); // .select() is needed to check if a row was actually updated
+    const sql = `UPDATE users SET name = ?, class = ?, roll_number = ? WHERE user_id = ?`;
+    const [result]: [any, any] = await pool.execute(sql, [name, userClass, rollNumber, id]);
 
-    if (error) {
-        throw error;
-    }
-
-    if (!data || data.length === 0) {
+    if (result.affectedRows === 0) {
         return res.status(404).json({ message: 'User not found to update.' });
     }
     

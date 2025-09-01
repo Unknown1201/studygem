@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../lib/supabaseAdmin';
+import pool from '../lib/mysql';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
@@ -13,21 +13,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ message: 'Missing required fields: userId, taskId, completed' });
         }
 
-        let error;
         if (completed) {
-            // Add progress record
-            const result = await supabaseAdmin.from('progress').upsert({ user_id: userId, task_id: taskId });
-            error = result.error;
+            // Assumes a UNIQUE or PRIMARY KEY constraint on (user_id, task_id) in the 'progress' table.
+            const sql = `INSERT INTO progress (user_id, task_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE task_id = VALUES(task_id)`;
+            await pool.execute(sql, [userId, taskId]);
         } else {
-            // Remove progress record
-            const result = await supabaseAdmin.from('progress').delete().match({ user_id: userId, task_id: taskId });
-            error = result.error;
+            const sql = `DELETE FROM progress WHERE user_id = ? AND task_id = ?`;
+            await pool.execute(sql, [userId, taskId]);
         }
         
-        if (error) {
-            throw error;
-        }
-
         return res.status(200).json({ message: 'Progress updated.' });
 
     } catch (error: any) {

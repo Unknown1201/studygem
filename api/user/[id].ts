@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import db from '../db';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 async function handleGet(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query;
@@ -7,31 +7,40 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ message: 'User ID is required.' });
     }
 
-    const connection = await db.getConnection();
-    try {
-        // Fetch user data
-        const [userRows]: any = await connection.execute('SELECT user_id, name, class, roll_number FROM users WHERE user_id = ?', [id]);
-        if (userRows.length === 0) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-        const userData = {
-            userId: userRows[0].user_id,
-            name: userRows[0].name,
-            class: userRows[0].class,
-            rollNumber: userRows[0].roll_number
-        };
-
-        // Fetch progress data
-        const [progressRows]: any = await connection.execute('SELECT task_id FROM progress WHERE user_id = ?', [id]);
-        const progress = progressRows.reduce((acc: any, row: any) => {
-            acc[row.task_id] = true;
-            return acc;
-        }, {});
-
-        res.status(200).json({ userData, progress });
-    } finally {
-        connection.release();
+    // Fetch user data
+    const { data: userRow, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('user_id, name, class, roll_number')
+        .eq('user_id', id)
+        .single();
+    
+    if (userError || !userRow) {
+        console.error('Supabase user fetch error:', userError);
+        return res.status(404).json({ message: 'User not found.' });
     }
+    const userData = {
+        userId: userRow.user_id,
+        name: userRow.name,
+        class: userRow.class,
+        rollNumber: userRow.roll_number
+    };
+
+    // Fetch progress data
+    const { data: progressRows, error: progressError } = await supabaseAdmin
+        .from('progress')
+        .select('task_id')
+        .eq('user_id', id);
+
+    if (progressError) {
+        // Log the error but don't fail the request, just return empty progress
+        console.error('Supabase progress fetch error:', progressError);
+    }
+    const progress = (progressRows || []).reduce((acc: any, row: any) => {
+        acc[row.task_id] = true;
+        return acc;
+    }, {});
+
+    res.status(200).json({ userData, progress });
 }
 
 async function handlePut(req: VercelRequest, res: VercelResponse) {
@@ -44,22 +53,22 @@ async function handlePut(req: VercelRequest, res: VercelResponse) {
     if (!name || !userClass || !rollNumber) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
     }
+    
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({ name: name, class: userClass, roll_number: rollNumber })
+        .eq('user_id', id)
+        .select(); // .select() is needed to check if a row was actually updated
 
-    const connection = await db.getConnection();
-    try {
-        const [result]: any = await connection.execute(
-            'UPDATE users SET name = ?, class = ?, roll_number = ? WHERE user_id = ?',
-            [name, userClass, rollNumber, id]
-        );
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'User not found to update.' });
-        }
-        
-        res.status(200).json({ message: 'User updated successfully.' });
-    } finally {
-        connection.release();
+    if (error) {
+        throw error;
     }
+
+    if (!data || data.length === 0) {
+        return res.status(404).json({ message: 'User not found to update.' });
+    }
+    
+    res.status(200).json({ message: 'User updated successfully.' });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -71,8 +80,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else {
             res.status(405).setHeader('Allow', ['GET', 'PUT']).json({ message: 'Method Not Allowed' });
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('API Error for /user/[id]:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        res.status(500).json({ message: 'Internal Server Error', details: error.message });
     }
 }

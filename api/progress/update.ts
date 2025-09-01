@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import db from '../db';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
@@ -13,27 +13,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ message: 'Missing required fields: userId, taskId, completed' });
         }
 
-        const connection = await db.getConnection();
-        
+        let error;
         if (completed) {
-            // Add progress record, ignoring if it already exists to prevent errors
-            await connection.execute(
-                'INSERT INTO progress (user_id, task_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE task_id=task_id',
-                [userId, taskId]
-            );
+            // Add progress record
+            const result = await supabaseAdmin.from('progress').upsert({ user_id: userId, task_id: taskId });
+            error = result.error;
         } else {
             // Remove progress record
-            await connection.execute(
-                'DELETE FROM progress WHERE user_id = ? AND task_id = ?',
-                [userId, taskId]
-            );
+            const result = await supabaseAdmin.from('progress').delete().match({ user_id: userId, task_id: taskId });
+            error = result.error;
         }
         
-        connection.release();
+        if (error) {
+            throw error;
+        }
+
         return res.status(200).json({ message: 'Progress updated.' });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error updating progress:', error);
-        return res.status(500).json({ message: 'Internal Server Error' });
+        return res.status(500).json({ message: 'Internal Server Error', details: error.message });
     }
 }

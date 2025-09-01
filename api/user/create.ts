@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import db from '../db';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
@@ -7,27 +7,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-        const { userId, name, userClass, rollNumber } = req.body;
+        const { userId, name, class: userClass, rollNumber } = req.body;
 
         if (!userId || !name || !userClass || !rollNumber) {
             return res.status(400).json({ message: 'Missing required fields.' });
         }
 
-        const connection = await db.getConnection();
-        await connection.execute(
-            'INSERT INTO users (user_id, name, class, roll_number) VALUES (?, ?, ?, ?)',
-            [userId, name, userClass, rollNumber]
-        );
-        connection.release();
+        const { error } = await supabaseAdmin.from('users').insert({
+            user_id: userId,
+            name: name,
+            class: userClass,
+            roll_number: rollNumber,
+        });
+
+        if (error) {
+            console.error('Supabase error creating user:', error);
+            // Handle potential duplicate user_id error (code 23505 for unique violation in Postgres)
+            if (error.code === '23505') {
+                 return res.status(409).json({ message: 'User ID already exists.' });
+            }
+            throw error;
+        }
 
         return res.status(201).json({ message: 'User created successfully.' });
 
     } catch (error: any) {
         console.error('Error creating user:', error);
-        // Handle potential duplicate user_id error
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'User ID already exists.' });
-        }
-        return res.status(500).json({ message: 'Internal Server Error' });
+        return res.status(500).json({ message: 'Internal Server Error', details: error.message });
     }
 }

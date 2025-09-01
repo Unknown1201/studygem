@@ -1,4 +1,3 @@
-import { supabase } from './supabaseClient';
 import type { Progress, UserData } from '../types';
 
 type UserProfile = Omit<UserData, 'currentStandard' | 'currentExam' | 'currentSubject' | 'currentChapter'>;
@@ -13,19 +12,16 @@ interface UpdateResult {
     message?: string;
 }
 
+// Replaces the old mock implementation with fetch calls to the new Vercel serverless API.
+
 export const createUser = async (userData: UserProfile): Promise<boolean> => {
     try {
-        const { error } = await supabase.from('users').insert({
-            user_id: userData.userId,
-            name: userData.name,
-            class: userData.class,
-            roll_number: userData.rollNumber,
+        const response = await fetch('/api/user/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
         });
-        if (error) {
-            console.error('Error creating user:', error);
-            return false;
-        }
-        return true;
+        return response.ok;
     } catch (error) {
         console.error('Error creating user:', error);
         return false;
@@ -34,39 +30,11 @@ export const createUser = async (userData: UserProfile): Promise<boolean> => {
 
 export const loadUser = async (userId: string): Promise<LoadUserResponse | null> => {
     try {
-        const { data: userRow, error: userError } = await supabase
-            .from('users')
-            .select('user_id, name, class, roll_number')
-            .eq('user_id', userId)
-            .single();
-
-        if (userError || !userRow) {
-            console.error('Error loading user data:', userError);
-            return null;
+        const response = await fetch(`/api/user/${userId}`);
+        if (response.ok) {
+            return await response.json();
         }
-
-        const { data: progressRows, error: progressError } = await supabase
-            .from('progress')
-            .select('task_id')
-            .eq('user_id', userId);
-
-        if (progressError) {
-            console.error('Error loading progress data:', progressError);
-        }
-
-        const userData: UserProfile = {
-            userId: userRow.user_id,
-            name: userRow.name,
-            class: userRow.class,
-            rollNumber: userRow.roll_number,
-        };
-        
-        const progress: Progress = (progressRows || []).reduce((acc: Progress, row: { task_id: string }) => {
-            acc[row.task_id] = true;
-            return acc;
-        }, {});
-
-        return { userData, progress };
+        return null;
     } catch (error) {
         console.error('Error loading user:', error);
         return null;
@@ -75,38 +43,30 @@ export const loadUser = async (userId: string): Promise<LoadUserResponse | null>
 
 export const updateUser = async (userData: UserProfile): Promise<UpdateResult> => {
     try {
-        const { error } = await supabase
-            .from('users')
-            .update({
-                name: userData.name,
-                class: userData.class,
-                roll_number: userData.rollNumber,
-            })
-            .eq('user_id', userData.userId);
-
-        if (error) {
-            console.error('Error updating user:', error);
-            return { success: false, message: error.message || "Failed to update." };
+        const response = await fetch(`/api/user/${userData.userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+        });
+        if (response.ok) {
+            return { success: true };
         }
-        return { success: true };
-    } catch (error: any) {
+        const errorData = await response.json();
+        return { success: false, message: errorData.message || "Failed to update." };
+    } catch (error) {
         console.error('Error updating user:', error);
-        return { success: false, message: error.message || "An unexpected error occurred." };
+        return { success: false, message: "An unexpected error occurred." };
     }
 };
 
 export const isUserIdTaken = async (userId: string): Promise<boolean> => {
     try {
-        const { error, count } = await supabase
-            .from('users')
-            .select('user_id', { count: 'exact', head: true })
-            .eq('user_id', userId);
-
-        if (error) {
-            console.error('Error checking user ID:', error);
-            return true; // Fail safe
+        const response = await fetch(`/api/user/exists/${userId}`);
+        if (response.ok) {
+            const { exists } = await response.json();
+            return exists;
         }
-        return count !== null && count > 0;
+        return true; // Fail safe
     } catch (error) {
         console.error('Error checking user ID:', error);
         return true; // Fail safe
@@ -115,25 +75,12 @@ export const isUserIdTaken = async (userId: string): Promise<boolean> => {
 
 export const updateProgress = async (userId: string, taskId: string, completed: boolean): Promise<boolean> => {
     try {
-        if (completed) {
-            const { error } = await supabase
-                .from('progress')
-                .upsert({ user_id: userId, task_id: taskId });
-            if (error) {
-                console.error('Error adding progress:', error);
-                return false;
-            }
-        } else {
-            const { error } = await supabase
-                .from('progress')
-                .delete()
-                .match({ user_id: userId, task_id: taskId });
-            if (error) {
-                console.error('Error deleting progress:', error);
-                return false;
-            }
-        }
-        return true;
+        const response = await fetch('/api/progress/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, taskId, completed }),
+        });
+        return response.ok;
     } catch (error) {
         console.error('Error updating progress:', error);
         return false;

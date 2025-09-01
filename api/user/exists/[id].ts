@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import db from '../db';
+import { supabaseAdmin } from '../../lib/supabaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
@@ -13,16 +13,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ message: 'User ID is required.' });
         }
 
-        const connection = await db.getConnection();
-        const [rows]: any = await connection.execute(
-            'SELECT user_id FROM users WHERE user_id = ?',
-            [id]
-        );
-        connection.release();
+        const { error, count } = await supabaseAdmin
+            .from('users')
+            .select('user_id', { count: 'exact', head: true })
+            .eq('user_id', id);
+            
+        if (error) {
+            throw error;
+        }
 
-        return res.status(200).json({ exists: rows.length > 0 });
+        return res.status(200).json({ exists: count !== null && count > 0 });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error checking user ID:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
     }

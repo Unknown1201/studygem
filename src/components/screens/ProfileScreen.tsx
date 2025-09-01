@@ -3,6 +3,7 @@ import { useAppContext } from '../../hooks/useAppContext';
 import Button from '../ui/Button';
 import { LoaderIcon, LogoutIcon } from '../ui/icons';
 import ThemeToggle from '../ui/ThemeToggle';
+import OfflineModeToggle from '../ui/OfflineModeToggle';
 
 const ProfileScreen: React.FC = () => {
     const { userData, updateUser, logoutUser, isLoading } = useAppContext();
@@ -77,6 +78,10 @@ const ProfileScreen: React.FC = () => {
                     <div className="flex items-center justify-between px-4">
                          <label className="text-sm font-medium text-slate-300">Appearance</label>
                          <ThemeToggle />
+                    </div>
+                     <div className="flex items-center justify-between px-4">
+                         <label className="text-sm font-medium text-slate-300">Network</label>
+                         <OfflineModeToggle />
                     </div>
                 </div>
             </div>

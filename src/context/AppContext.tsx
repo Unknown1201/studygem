@@ -23,6 +23,7 @@ interface AppContextType {
     notification: { message: string, id: number } | null;
     isLoading: boolean;
     theme: Theme;
+    isOffline: boolean;
     setScreen: (screen: Screen) => void;
     showNotification: (message: string) => void;
     createUser: (name: string, userClass: string, rollNumber: string) => Promise<void>;
@@ -40,6 +41,7 @@ interface AppContextType {
     calculateProgress: (level: 'exam' | 'subject' | 'chapter', identifiers: { standard: string; exam: string; subject?: string; chapter?: string }) => number;
     generateRecoveryPDF: () => void;
     toggleTheme: () => void;
+    toggleOfflineMode: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -53,10 +55,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [theme, setTheme] = useState<Theme>(() => {
         if (typeof window !== 'undefined') {
             const savedTheme = localStorage.getItem('studygem_theme');
-            // Default to dark for the new theme
             if (savedTheme === 'light') return 'light';
         }
         return 'dark';
+    });
+    const [isOffline, setIsOffline] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('studygem_offline_mode') === 'true';
+        }
+        return false;
     });
 
     useEffect(() => {
@@ -72,6 +79,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
     };
 
+    const toggleOfflineMode = () => {
+        const newOfflineState = !isOffline;
+        setIsOffline(newOfflineState);
+        localStorage.setItem('studygem_offline_mode', String(newOfflineState));
+        showNotification(newOfflineState ? "Offline mode enabled." : "Offline mode disabled. Syncing with server.");
+        if (!newOfflineState && userData.userId) {
+            // Optional: Add logic here to sync local changes to the server when going online.
+            // For now, it just switches the mode for future actions.
+        }
+    };
+
     const setScreen = (screen: Screen) => {
         setCurrentScreen(screen);
     };
@@ -80,33 +98,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNotification({ message, id: Date.now() });
     };
 
-    const generateUniqueId = async (name: string, userClass: string, roll: string): Promise<string | null> => {
+    const generateUniqueId = async (name: string, isOfflineMode: boolean): Promise<string | null> => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         let id = '';
         let isUnique = false;
         let attempts = 0;
-        const maxAttempts = 10; // Prevent runaway loops
+        const maxAttempts = 20; // Increased attempts for more robustness
 
         while (!isUnique && attempts < maxAttempts) {
             attempts++;
-            const namePart = name.substring(0, 1).toUpperCase();
-            const classPart = userClass.replace(/[^A-Z0-9]/ig, '').slice(-1).toUpperCase();
-            const rollPart = roll.replace(/[^A-Z0-9]/ig, '').slice(-1).toUpperCase();
-
+            const namePart = name.substring(0, 2).toUpperCase().padEnd(2, 'X');
+            
             let randomPart = '';
-            for (let i = 0; i < 2; i++) {
+            for (let i = 0; i < 3; i++) { // Increased random part to 3 chars
                 randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
             }
 
-            const combined = `${namePart}${classPart}${rollPart}${randomPart}`.padEnd(5, 'X');
-            id = `SG-${combined.slice(0, 5)}`;
+            id = `SG-${namePart}${randomPart}`;
 
             try {
-                const isTaken = await apiService.isUserIdTaken(id);
+                const isTaken = await apiService.isUserIdTaken(id, isOfflineMode);
                 isUnique = !isTaken;
             } catch (error) {
                 console.error("API error during user ID check. Aborting creation.", error);
-                // If the API fails, we cannot safely create a user. Abort.
                 return null;
             }
         }
@@ -169,7 +183,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [calculateExamProgress, calculateSubjectProgress, calculateChapterProgress]);
 
     const toggleTask = useCallback(async (taskId: string, completed: boolean) => {
-        // Optimistically update UI
         const newProgress = { ...progress };
         if (completed) {
             newProgress[taskId] = true;
@@ -178,28 +191,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setProgress(newProgress);
         
-        // Send update to the backend
-        await apiService.updateProgress(userData.userId, taskId, completed);
-    }, [progress, userData.userId]);
+        await apiService.updateProgress(userData.userId, taskId, completed, isOffline);
+    }, [progress, userData.userId, isOffline]);
 
     const createUser = async (name: string, userClass: string, rollNumber: string) => {
         setIsLoading(true);
-        const userId = await generateUniqueId(name, userClass, rollNumber);
+        const userId = await generateUniqueId(name, isOffline);
 
         if (!userId) {
-            showNotification("Error: Server issue preventing user creation. Please try again later.");
+            showNotification("Error: Could not generate a unique ID. Please try again.");
             setIsLoading(false);
             return;
         }
 
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        const success = await apiService.createUser(newUserData);
+        const success = await apiService.createUser(newUserData, isOffline);
         
         if (success) {
             setUserData(newUserData);
             setProgress({});
-            localStorage.setItem('studygem_userid', userId);
+            if (!isOffline) {
+                 localStorage.setItem('studygem_userid', userId);
+            }
             setScreen('userid');
         } else {
             showNotification("Error: Could not create user account.");
@@ -213,7 +227,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        const data = await apiService.loadUser(userId);
+        const data = await apiService.loadUser(userId, isOffline);
         if (data) {
             setUserData({
                 ...initialUserData,
@@ -223,10 +237,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 rollNumber: data.userData.rollNumber,
             });
             setProgress(data.progress || {});
-            localStorage.setItem('studygem_userid', data.userData.userId);
+            if (!isOffline) {
+                localStorage.setItem('studygem_userid', data.userData.userId);
+            }
             setScreen('standard');
         } else {
-            showNotification("Invalid Study ID. Please try again.");
+            showNotification(isOffline ? "Could not find Study ID in local data." : "Invalid Study ID. Please try again.");
         }
         setIsLoading(false);
     };
@@ -235,7 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsLoading(true);
         const updatedUserData: UserData = { ...userData, name: newData.name, class: newData.userClass, rollNumber: newData.rollNumber };
         
-        const result = await apiService.updateUser(updatedUserData);
+        const result = await apiService.updateUser(updatedUserData, isOffline);
         
         if (result.success) {
             setUserData(updatedUserData);
@@ -258,7 +274,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     useEffect(() => {
-        const checkCookie = async () => {
+        const checkLogin = async () => {
+            if (isOffline) {
+                // In offline mode, don't auto-login from a potentially stale cookie.
+                // User must manually "login" with their ID to load local data.
+                setIsLoading(false);
+                return;
+            }
             const userId = localStorage.getItem('studygem_userid');
             if (userId) {
                 await loginUser(userId);
@@ -266,7 +288,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setIsLoading(false);
             }
         };
-        checkCookie();
+        checkLogin();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -298,7 +320,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'task': setScreen('chapter'); break;
             case 'userid': setScreen('onboarding'); break;
             case 'profile': setScreen('standard'); break;
-            default: break; // Welcome screen has no back
+            default: break;
         }
     };
     
@@ -320,8 +342,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return (
         <AppContext.Provider value={{
-            currentScreen, screenTitle, userData, progress, notification, isLoading, theme,
-            setScreen, showNotification, toggleTheme,
+            currentScreen, screenTitle, userData, progress, notification, isLoading, theme, isOffline,
+            setScreen, showNotification, toggleTheme, toggleOfflineMode,
             createUser, loginUser, updateUser, logoutUser,
             selectStandard, selectExam, selectSubject, selectChapter,
             goBack, toggleTask, getTaskId, isTaskCompleted, calculateProgress, generateRecoveryPDF

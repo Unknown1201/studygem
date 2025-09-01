@@ -1,10 +1,10 @@
 import React from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
-import { GemIcon, HomeIcon, LogoutIcon, UserIcon } from './icons';
+import { CloudOfflineIcon, GemIcon, HomeIcon, LogoutIcon, UserIcon } from './icons';
 import ThemeToggle from './ThemeToggle';
 
 const Sidebar: React.FC = () => {
-    const { userData, currentScreen, setScreen, logoutUser } = useAppContext();
+    const { userData, currentScreen, setScreen, logoutUser, isOffline } = useAppContext();
     const isLoggedIn = userData.userId && !['welcome', 'onboarding', 'userid'].includes(currentScreen);
 
     const NavButton: React.FC<{ screen: string, icon: React.ReactNode, label: string }> = ({ screen, icon, label }) => {
@@ -44,7 +44,11 @@ const Sidebar: React.FC = () => {
                  {isLoggedIn && (
                     <div className="flex items-center justify-between px-2">
                          <div className="text-sm">
-                            <p className="font-semibold text-slate-100">{userData.name}</p>
+                            <p className="font-semibold text-slate-100 flex items-center gap-2">
+                                {userData.name}
+                                {/* Fix: Moved title attribute from the icon to a wrapping span to resolve the TypeScript error. */}
+                                {isOffline && <span title="Offline Mode"><CloudOfflineIcon className="w-4 h-4 text-slate-400" /></span>}
+                            </p>
                             <p className="text-slate-400">{userData.userId}</p>
                          </div>
                          <ThemeToggle />

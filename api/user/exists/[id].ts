@@ -13,16 +13,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ message: 'User ID is required.' });
         }
 
-        const { error, count } = await supabaseAdmin
+        const { data, error } = await supabaseAdmin
             .from('users')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', id);
+            .select('user_id')
+            .eq('user_id', id)
+            .limit(1);
             
         if (error) {
             throw error;
         }
 
-        return res.status(200).json({ exists: count !== null && count > 0 });
+        return res.status(200).json({ exists: data !== null && data.length > 0 });
 
     } catch (error: any) {
         console.error('Error checking user ID:', error);

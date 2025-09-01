@@ -60,17 +60,17 @@ export const updateUser = async (userData: UserProfile): Promise<UpdateResult> =
 };
 
 export const isUserIdTaken = async (userId: string): Promise<boolean> => {
-    try {
-        const response = await fetch(`/api/user/exists/${userId}`);
-        if (response.ok) {
-            const { exists } = await response.json();
-            return exists;
-        }
-        return true; // Fail safe
-    } catch (error) {
-        console.error('Error checking user ID:', error);
-        return true; // Fail safe
+    const response = await fetch(`/api/user/exists/${userId}`);
+
+    if (response.ok) {
+        const { exists } = await response.json();
+        return exists;
     }
+
+    // For non-OK responses (like 500), throw an error so the caller knows the check failed.
+    const errorText = await response.text();
+    console.error('Error checking user ID:', response.status, errorText);
+    throw new Error(`Failed to check user ID. Server responded with ${response.status}.`);
 };
 
 export const updateProgress = async (userId: string, taskId: string, completed: boolean): Promise<boolean> => {

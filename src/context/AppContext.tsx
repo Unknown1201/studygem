@@ -80,27 +80,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNotification({ message, id: Date.now() });
     };
 
-    const generateUniqueId = async (name: string, userClass: string, roll: string): Promise<string> => {
+    const generateUniqueId = async (name: string, userClass: string, roll: string): Promise<string | null> => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         let id = '';
         let isUnique = false;
+        let attempts = 0;
+        const maxAttempts = 10; // Prevent runaway loops
 
-        while(!isUnique) {
+        while (!isUnique && attempts < maxAttempts) {
+            attempts++;
             const namePart = name.substring(0, 1).toUpperCase();
             const classPart = userClass.replace(/[^A-Z0-9]/ig, '').slice(-1).toUpperCase();
             const rollPart = roll.replace(/[^A-Z0-9]/ig, '').slice(-1).toUpperCase();
-            
+
             let randomPart = '';
             for (let i = 0; i < 2; i++) {
                 randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
             }
-            
+
             const combined = `${namePart}${classPart}${rollPart}${randomPart}`.padEnd(5, 'X');
-            id = `SG-${combined.slice(0,5)}`;
-            
-            const checkResult = await apiService.isUserIdTaken(id);
-            isUnique = !checkResult;
+            id = `SG-${combined.slice(0, 5)}`;
+
+            try {
+                const isTaken = await apiService.isUserIdTaken(id);
+                isUnique = !isTaken;
+            } catch (error) {
+                console.error("API error during user ID check. Aborting creation.", error);
+                // If the API fails, we cannot safely create a user. Abort.
+                return null;
+            }
         }
+
+        if (!isUnique) {
+            console.error(`Could not generate a unique ID after ${maxAttempts} attempts.`);
+            return null;
+        }
+
         return id;
     };
 
@@ -170,6 +185,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const createUser = async (name: string, userClass: string, rollNumber: string) => {
         setIsLoading(true);
         const userId = await generateUniqueId(name, userClass, rollNumber);
+
+        if (!userId) {
+            showNotification("Error: Server issue preventing user creation. Please try again later.");
+            setIsLoading(false);
+            return;
+        }
+
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
         const success = await apiService.createUser(newUserData);
@@ -180,7 +202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             localStorage.setItem('studygem_userid', userId);
             setScreen('userid');
         } else {
-            showNotification("Error: Could not create user.");
+            showNotification("Error: Could not create user account.");
         }
         setIsLoading(false);
     };

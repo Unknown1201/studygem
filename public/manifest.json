@@ -15,9 +15,10 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#0ea5e9",
+  "scope": "/",
   "description": "A sleek, modern application to track your academic progress through different subjects and chapters."
 }

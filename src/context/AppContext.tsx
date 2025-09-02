@@ -26,7 +26,7 @@ interface AppContextType {
     isOffline: boolean;
     setScreen: (screen: Screen) => void;
     showNotification: (message: string) => void;
-    createUser: (name: string, userClass: string, rollNumber: string) => Promise<void>;
+    createUser: (name: string, userClass: string, rollNumber: string, userId: string) => Promise<void>;
     loginUser: (userId: string) => Promise<void>;
     updateUser: (newData: { name: string, userClass: string, rollNumber: string }) => Promise<boolean>;
     logoutUser: () => void;
@@ -98,45 +98,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNotification({ message, id: Date.now() });
     };
 
-    const generateUniqueId = async (name: string, rollNumber: string, isOfflineMode: boolean): Promise<string | null> => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let id = '';
-        let isUnique = false;
-        let attempts = 0;
-        const maxAttempts = 50;
-
-        while (!isUnique && attempts < maxAttempts) {
-            attempts++;
-            
-            // Using 1 char from name, 1 from roll, and 3 random chars to greatly increase uniqueness
-            const namePart = (name.trim().toUpperCase().substring(0, 1) || 'X');
-            const rollPart = (rollNumber.trim().replace(/[^0-9]/g, '').slice(-1) || '0');
-
-            let randomPart = '';
-            for (let i = 0; i < 3; i++) {
-                randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            
-            id = `${namePart}${rollPart}${randomPart}`;
-
-            try {
-                const isTaken = await apiService.isUserIdTaken(id, isOfflineMode);
-                isUnique = !isTaken;
-            } catch (error) {
-                console.error("API error during user ID check. Aborting creation.", error);
-                return null;
-            }
-        }
-
-        if (!isUnique) {
-            console.error(`Could not generate a unique ID after ${maxAttempts} attempts.`);
-            return null;
-        }
-
-        return id;
-    };
-
-
     const getTaskId = useCallback((task: string): string => {
         return `${userData.currentStandard}-${userData.currentExam}-${userData.currentSubject}-${userData.currentChapter}-${task}`;
     }, [userData]);
@@ -197,16 +158,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await apiService.updateProgress(userData.userId, taskId, completed, isOffline);
     }, [progress, userData.userId, isOffline]);
 
-    const createUser = async (name: string, userClass: string, rollNumber: string) => {
+    const createUser = async (name: string, userClass: string, rollNumber: string, userId: string) => {
         setIsLoading(true);
-        const userId = await generateUniqueId(name, rollNumber, isOffline);
-
-        if (!userId) {
-            showNotification("Error: Could not generate a unique ID. Please try again.");
-            setIsLoading(false);
-            return;
-        }
-
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
         const success = await apiService.createUser(newUserData, isOffline);
@@ -219,7 +172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             setScreen('userid');
         } else {
-            showNotification("Error: Could not create user account.");
+            showNotification("Error: Could not create user. The ID might have been taken.");
         }
         setIsLoading(false);
     };

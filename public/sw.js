@@ -1,50 +1,8 @@
-const CACHE_NAME = 'studygem-v1';
-const URLS_TO_CACHE = [
-    '/',
-    '/index.html',
-];
+const CACHE_NAME = 'studygem-v2';
 
 self.addEventListener('install', event => {
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => {
-                console.log('Opened cache');
-                return cache.addAll(URLS_TO_CACHE);
-            })
-    );
-});
-
-self.addEventListener('fetch', event => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                if (response) {
-                    return response;
-                }
-
-                const fetchRequest = event.request.clone();
-
-                return fetch(fetchRequest).then(
-                    response => {
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            return response;
-                        }
-
-                        const responseToCache = response.clone();
-
-                        caches.open(CACHE_NAME)
-                            .then(cache => {
-                                // We don't cache API calls
-                                if (!event.request.url.includes('/api/')) {
-                                    cache.put(event.request, responseToCache);
-                                }
-                            });
-
-                        return response;
-                    }
-                );
-            })
-    );
+    // Skip waiting to activate the new service worker immediately.
+    event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {
@@ -58,6 +16,44 @@ self.addEventListener('activate', event => {
                     }
                 })
             );
+        }).then(() => self.clients.claim()) // Take control of all open clients.
+    );
+});
+
+self.addEventListener('fetch', event => {
+    const { request } = event;
+    const url = new URL(request.url);
+
+    // Always go to the network for API calls.
+    if (url.pathname.startsWith('/api/')) {
+        event.respondWith(fetch(request));
+        return;
+    }
+
+    // For navigation requests, try the network first, then fall back to the cache.
+    if (request.mode === 'navigate') {
+        event.respondWith(
+            fetch(request).catch(() => caches.match('/index.html'))
+        );
+        return;
+    }
+
+    // For all other requests (assets, scripts), use a cache-first strategy.
+    // Fetch from the network in the background to keep the cache updated (stale-while-revalidate).
+    event.respondWith(
+        caches.match(request).then(cachedResponse => {
+            const fetchPromise = fetch(request).then(networkResponse => {
+                const responseToCache = networkResponse.clone();
+                caches.open(CACHE_NAME).then(cache => {
+                    cache.put(request, responseToCache);
+                });
+                return networkResponse;
+            }).catch(err => {
+                console.warn('Fetch failed; returning offline page instead.', err);
+                return caches.match('/index.html');
+            });
+
+            return cachedResponse || fetchPromise;
         })
     );
 });

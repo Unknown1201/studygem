@@ -175,8 +175,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsLoading(true);
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        // Fix: When syncing a guest, account creation must be online.
-        const success = await apiService.createUser(newUserData, isSyncingGuest ? false : isOffline);
+        // Account creation must always be an online action to prevent creating
+        // local-only accounts that can't be synced or used elsewhere.
+        // The "Guest" mode serves the purpose of a local-only profile.
+        const success = await apiService.createUser(newUserData, false);
         
         if (success) {
             if (isSyncingGuest) {
@@ -210,7 +212,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        const data = await apiService.loadUser(userId, isOffline);
+        // Login must always be an online action to fetch the authoritative user profile.
+        // The offline toggle should affect data syncing *after* login, not authentication itself.
+        const data = await apiService.loadUser(userId, false);
         if (data) {
             // Fix: Ensure isGuest is false when a regular user logs in.
             setIsGuest(false);

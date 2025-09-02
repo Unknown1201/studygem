@@ -19,7 +19,7 @@ const StandardScreen: React.FC = () => {
                     >
                         <span className="font-semibold text-lg">{standard}th Standard</span>
                         {!isAvailable && (
-                            <span className="text-xs font-medium bg-white/10 text-slate-300 px-2.5 py-1 rounded-full">Upcoming</span>
+                            <span className="ml-3 text-xs font-medium bg-sky-500/20 text-sky-300 px-2.5 py-1 rounded-full">Upcoming</span>
                         )}
                     </ListItem>
                 );

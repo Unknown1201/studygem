@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudyGem - Academic Progress Tracker</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      // Prevents flash of unstyled content for theme
+      if (localStorage.getItem('studygem_theme') === 'light') {
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
+    <style>
+      /* Base styles remain for aurora background, which is independent of Tailwind */
+      #aurora-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        overflow: hidden;
+      }
+      #aurora-bg::before,
+      #aurora-bg::after {
+        content: '';
+        position: absolute;
+        width: 120vmax;
+        height: 120vmax;
+        border-radius: 50%;
+        opacity: 0.3;
+        filter: blur(100px);
+        will-change: transform;
+      }
+      #aurora-bg::before {
+        background: radial-gradient(circle at center, #0ea5e9, transparent 40%);
+        top: -50%;
+        left: -50%;
+        animation: aurora 25s linear infinite alternate;
+      }
+      #aurora-bg::after {
+        background: radial-gradient(circle at center, #312e81, transparent 40%);
+        bottom: -50%;
+        right: -50%;
+        animation: aurora 30s linear infinite alternate-reverse;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "@vercel/node": "https://aistudiocdn.com/@vercel/node@^5.3.17",
+    "vite": "https://aistudiocdn.com/vite@^7.1.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.2",
+    "jspdf": "https://aistudiocdn.com/jspdf@^3.0.2",
+    "recharts": "https://aistudiocdn.com/recharts@^3.1.2",
+    "@vercel/postgres": "https://aistudiocdn.com/@vercel/postgres@^0.10.0",
+    "next/": "https://aistudiocdn.com/next@^15.5.2/",
+    "next": "https://aistudiocdn.com/next@^15.5.2"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="aurora-bg"></div>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

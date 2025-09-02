@@ -335,6 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'chapter': return userData.currentSubject;
             case 'task': return userData.currentChapter;
             case 'profile': return 'Profile & Settings';
+            case 'dbtest': return 'Database Connection Test';
             default: return 'StudyGem';
         }
     }, [currentScreen, userData]);

@@ -5,6 +5,10 @@ import { ChevronLeftIcon, UserIcon, HomeIcon } from './icons';
 const NavigationBar: React.FC = () => {
     const { currentScreen, goBack, setScreen } = useAppContext();
 
+    if (currentScreen === 'dbtest') {
+        return null;
+    }
+
     const showBackButton = ![
         'welcome',
         'onboarding',

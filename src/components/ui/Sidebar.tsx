@@ -5,7 +5,7 @@ import ThemeToggle from './ThemeToggle';
 
 const Sidebar: React.FC = () => {
     const { userData, currentScreen, setScreen, logoutUser, isOffline } = useAppContext();
-    const isLoggedIn = userData.userId && !['welcome', 'onboarding', 'userid'].includes(currentScreen);
+    const isLoggedIn = userData.userId && !['welcome', 'onboarding', 'userid', 'dbtest'].includes(currentScreen);
 
     const NavButton: React.FC<{ screen: string, icon: React.ReactNode, label: string }> = ({ screen, icon, label }) => {
         const isActive = currentScreen === screen;

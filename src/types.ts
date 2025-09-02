@@ -23,6 +23,6 @@ export interface Syllabus {
     } | null;
 }
 
-export type Screen = 'welcome' | 'onboarding' | 'userid' | 'standard' | 'exam' | 'subject' | 'chapter' | 'task' | 'profile';
+export type Screen = 'welcome' | 'onboarding' | 'userid' | 'standard' | 'exam' | 'subject' | 'chapter' | 'task' | 'profile' | 'dbtest';
 
 export type Theme = 'light' | 'dark';

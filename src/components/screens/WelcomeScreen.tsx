@@ -23,6 +23,7 @@ const WelcomeScreen: React.FC = () => {
                     <ArrowRightIcon className="w-5 h-5" />
                 </Button>
                 <Button variant="secondary" onClick={loginAsGuest}>Continue as Guest</Button>
+                <Button variant="secondary" onClick={() => setScreen('dbtest')}>DB Connection Test</Button>
                  <p className="text-xs text-slate-600 pt-2">A DevDigital Creation by @asli_devv</p>
             </div>
         </div>

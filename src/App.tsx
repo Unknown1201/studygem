@@ -9,6 +9,7 @@ import SubjectScreen from './components/screens/SubjectScreen';
 import ChapterScreen from './components/screens/ChapterScreen';
 import TaskScreen from './components/screens/TaskScreen';
 import ProfileScreen from './components/screens/ProfileScreen';
+import DbTestScreen from './components/screens/DbTestScreen';
 import { useAppContext } from './hooks/useAppContext';
 import Notification from './components/ui/Notification';
 import DesktopLayout from './components/ui/DesktopLayout';
@@ -41,6 +42,7 @@ const ScreenRenderer: React.FC = () => {
         'chapter': <ChapterScreen />,
         'task': <TaskScreen />,
         'profile': <ProfileScreen />,
+        'dbtest': <DbTestScreen />,
     };
 
     const ScreenComponent = screens[currentScreen] || <WelcomeScreen />;

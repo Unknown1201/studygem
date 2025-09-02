@@ -14,7 +14,6 @@ const OnboardingScreen: React.FC = () => {
     const [userId, setUserId] = useState('');
     const [idStatus, setIdStatus] = useState<'idle' | 'checking' | 'taken' | 'available' | 'invalid'>('idle');
     const [idError, setIdError] = useState('');
-    // Fix: Destructure isOffline from context to use in the apiService call.
     const { createUser, loginUser, isLoading, isOffline } = useAppContext();
 
     const handleStep1Next = () => {
@@ -48,8 +47,8 @@ const OnboardingScreen: React.FC = () => {
         }
 
         try {
-            // Fix: Pass the isOffline flag to the apiService function to resolve the argument mismatch error.
-            const isTaken = await apiService.isUserIdTaken(id.toUpperCase(), isOffline);
+            // Fix: Checking if a user ID is taken must always be an online action.
+            const isTaken = await apiService.isUserIdTaken(id.toUpperCase(), false);
             if (isTaken) {
                 setIdStatus('taken');
                 setIdError('This ID is already taken.');

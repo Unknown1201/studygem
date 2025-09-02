@@ -23,8 +23,11 @@ interface AppContextType {
     notification: { message: string, id: number } | null;
     isLoading: boolean;
     theme: Theme;
-    // Fix: Add isOffline and toggleOfflineMode to the context type to support offline functionality.
     isOffline: boolean;
+    // Fix: Add guest-related properties to the context type.
+    isGuest: boolean;
+    loginAsGuest: () => Promise<void>;
+    startGuestSync: () => void;
     toggleOfflineMode: () => void;
     setScreen: (screen: Screen) => void;
     showNotification: (message: string) => void;
@@ -53,15 +56,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [progress, setProgress] = useState<Progress>({});
     const [notification, setNotification] = useState<{ message: string, id: number } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    // Fix: Add state for guest mode.
+    const [isGuest, setIsGuest] = useState(false);
+    const [isSyncingGuest, setIsSyncingGuest] = useState(false);
     const [theme, setTheme] = useState<Theme>(() => {
         if (typeof window !== 'undefined') {
             const savedTheme = localStorage.getItem('studygem_theme');
-            // Default to dark for the new theme
             if (savedTheme === 'light') return 'light';
         }
         return 'dark';
     });
-    // Fix: Add isOffline state management and a toggle function for offline mode.
     const [isOffline, setIsOffline] = useState<boolean>(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('studygem_offline_mode') === 'true';
@@ -155,7 +159,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [calculateExamProgress, calculateSubjectProgress, calculateChapterProgress]);
 
     const toggleTask = useCallback(async (taskId: string, completed: boolean) => {
-        // Optimistically update UI
         const newProgress = { ...progress };
         if (completed) {
             newProgress[taskId] = true;
@@ -164,19 +167,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setProgress(newProgress);
         
-        // Send update to the backend
-        // Fix: Pass the isOffline flag to the apiService function to fix argument mismatch.
-        await apiService.updateProgress(userData.userId, taskId, completed, isOffline);
-    }, [progress, userData.userId, isOffline]);
+        // Fix: A guest's progress should always be saved offline.
+        await apiService.updateProgress(userData.userId, taskId, completed, isGuest || isOffline);
+    }, [progress, userData.userId, isGuest, isOffline]);
 
     const createUser = async (name: string, userClass: string, rollNumber: string, userId: string) => {
         setIsLoading(true);
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        // Fix: Pass the isOffline flag to the apiService function to fix argument mismatch.
-        const success = await apiService.createUser(newUserData, isOffline);
+        // Fix: When syncing a guest, account creation must be online.
+        const success = await apiService.createUser(newUserData, isSyncingGuest ? false : isOffline);
         
         if (success) {
+            if (isSyncingGuest) {
+                showNotification("Account created! Syncing guest progress...");
+                const guestProgressData = await apiService.loadUser('GUEST', true);
+                if (guestProgressData && guestProgressData.progress) {
+                    const tasks = Object.keys(guestProgressData.progress);
+                    await Promise.all(tasks.map(taskId => 
+                        apiService.updateProgress(userId, taskId, true, false)
+                    ));
+                }
+                await apiService.deleteGuestData();
+                setIsSyncingGuest(false);
+                setIsGuest(false);
+                showNotification("Progress synced successfully!");
+            }
+
             setUserData(newUserData);
             setProgress({});
             localStorage.setItem('studygem_userid', userId);
@@ -193,9 +210,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        // Fix: Pass the isOffline flag to the apiService function to fix argument mismatch.
         const data = await apiService.loadUser(userId, isOffline);
         if (data) {
+            // Fix: Ensure isGuest is false when a regular user logs in.
+            setIsGuest(false);
             setUserData({
                 ...initialUserData,
                 userId: data.userData.userId,
@@ -211,36 +229,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setIsLoading(false);
     };
+    
+    // Fix: Add loginAsGuest function.
+    const loginAsGuest = async () => {
+        setIsLoading(true);
+        const guestUserId = 'GUEST';
+        
+        let data = await apiService.loadUser(guestUserId, true);
+        if (!data) {
+            const guestProfile = { userId: guestUserId, name: 'Guest', class: 'N/A', rollNumber: 'N/A' };
+            await apiService.createUser(guestProfile, true);
+            data = { userData: guestProfile, progress: {} };
+        }
+        
+        setUserData({ ...initialUserData, ...data.userData });
+        setProgress(data.progress || {});
+        setIsGuest(true);
+        setScreen('standard');
+        setIsLoading(false);
+        showNotification("Browsing as Guest. Progress is saved locally.");
+    };
 
     const updateUser = async (newData: { name: string, userClass: string, rollNumber: string }): Promise<boolean> => {
+        // Fix: Guest profiles cannot be updated.
+        if (isGuest) {
+            showNotification("Guest profile cannot be updated.");
+            return false;
+        }
         setIsLoading(true);
         const updatedUserData: UserData = { ...userData, name: newData.name, class: newData.userClass, rollNumber: newData.rollNumber };
         
-        // Fix: Pass the isOffline flag to the apiService function.
         const result = await apiService.updateUser(updatedUserData, isOffline);
         
         if (result.success) {
             setUserData(updatedUserData);
             showNotification("Profile updated successfully!");
-            setIsLoading(false);
-            return true;
         } else {
             showNotification(result.message || "An error occurred.");
-            setIsLoading(false);
-            return false;
         }
+        setIsLoading(false);
+        return result.success;
     };
 
     const logoutUser = () => {
         setUserData(initialUserData);
         setProgress({});
         localStorage.removeItem('studygem_userid');
+        // Fix: Reset guest state on logout.
+        setIsGuest(false);
+        setIsSyncingGuest(false);
         setScreen('welcome');
         showNotification("You have been logged out.");
     };
 
+    // Fix: Add startGuestSync function.
+    const startGuestSync = () => {
+        setIsSyncingGuest(true);
+        setScreen('onboarding');
+    };
+
     useEffect(() => {
-        const checkCookie = async () => {
+        const checkUserId = async () => {
             const userId = localStorage.getItem('studygem_userid');
             if (userId) {
                 await loginUser(userId);
@@ -248,7 +297,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setIsLoading(false);
             }
         };
-        checkCookie();
+        checkUserId();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -280,7 +329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'task': setScreen('chapter'); break;
             case 'userid': setScreen('onboarding'); break;
             case 'profile': setScreen('standard'); break;
-            default: break; // Welcome screen has no back
+            default: break;
         }
     };
     
@@ -299,15 +348,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [currentScreen, userData]);
 
-
     return (
         <AppContext.Provider value={{
-            currentScreen, screenTitle, userData, progress, notification, isLoading, theme,
+            currentScreen, screenTitle, userData, progress, notification, isLoading, theme, isGuest,
             setScreen, showNotification, toggleTheme,
-            createUser, loginUser, updateUser, logoutUser,
+            createUser, loginUser, loginAsGuest, updateUser, logoutUser, startGuestSync,
             selectStandard, selectExam, selectSubject, selectChapter,
             goBack, toggleTask, getTaskId, isTaskCompleted, calculateProgress, generateRecoveryPDF,
-            // Fix: Provide isOffline state and toggle function through the context.
             isOffline, toggleOfflineMode,
         }}>
             {children}

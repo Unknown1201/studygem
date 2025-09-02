@@ -38,6 +38,14 @@ const setOfflineData = (data: OfflineDB) => {
     }
 };
 
+// Fix: Add deleteGuestData function needed for syncing guest progress to a real account.
+export const deleteGuestData = async (): Promise<void> => {
+    const db = getOfflineData();
+    delete db.users['GUEST'];
+    delete db.progress['GUEST'];
+    setOfflineData(db);
+};
+
 // --- API Service Functions ---
 
 export const createUser = async (userData: UserProfile, isOffline: boolean): Promise<boolean> => {

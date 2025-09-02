@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '@/api/lib/mysql';
+import { sql } from '@vercel/postgres';
 
 async function handleGet(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query;
@@ -8,8 +8,9 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
     }
 
     // Fetch user data
-    const userSql = `SELECT user_id, name, class, roll_number FROM users WHERE user_id = ?`;
-    const [userRows]: any[] = await pool.query(userSql, [id]);
+    const { rows: userRows } = await sql`
+        SELECT user_id, name, class, roll_number FROM users WHERE user_id = ${id}
+    `;
 
     if (userRows.length === 0) {
         return res.status(404).json({ message: 'User not found.' });
@@ -23,8 +24,9 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
     };
 
     // Fetch progress data
-    const progressSql = `SELECT task_id FROM progress WHERE user_id = ?`;
-    const [progressRows]: any[] = await pool.query(progressSql, [id]);
+    const { rows: progressRows } = await sql`
+        SELECT task_id FROM progress WHERE user_id = ${id}
+    `;
 
     const progress = progressRows.reduce((acc: any, row: any) => {
         acc[row.task_id] = true;
@@ -45,10 +47,13 @@ async function handlePut(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
     }
     
-    const sql = `UPDATE users SET name = ?, class = ?, roll_number = ? WHERE user_id = ?`;
-    const [result]: [any, any] = await pool.execute(sql, [name, userClass, rollNumber, id]);
+    const { rowCount } = await sql`
+        UPDATE users 
+        SET name = ${name}, class = ${userClass}, roll_number = ${rollNumber} 
+        WHERE user_id = ${id}
+    `;
 
-    if (result.affectedRows === 0) {
+    if (rowCount === 0) {
         return res.status(404).json({ message: 'User not found to update.' });
     }
     

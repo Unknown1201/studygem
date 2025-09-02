@@ -4,7 +4,6 @@ import { useAppContext } from '../../hooks/useAppContext';
 import Button from '../ui/Button';
 
 const WelcomeScreen: React.FC = () => {
-    // Fix: Add loginAsGuest to enable guest mode.
     const { setScreen, loginAsGuest } = useAppContext();
 
     return (
@@ -23,7 +22,6 @@ const WelcomeScreen: React.FC = () => {
                     Get Started
                     <ArrowRightIcon className="w-5 h-5" />
                 </Button>
-                {/* Fix: Restore the "Continue as Guest" button. */}
                 <Button variant="secondary" onClick={loginAsGuest}>Continue as Guest</Button>
                  <p className="text-xs text-slate-600 pt-2">A DevDigital Creation by @asli_devv</p>
             </div>

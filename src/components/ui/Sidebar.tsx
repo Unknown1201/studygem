@@ -46,7 +46,6 @@ const Sidebar: React.FC = () => {
                          <div className="text-sm">
                             <p className="font-semibold text-slate-100 flex items-center gap-2">
                                 {userData.name}
-                                {/* Fix: Moved title attribute from the icon to a wrapping span to resolve the TypeScript error. */}
                                 {isOffline && <span title="Offline Mode"><CloudOfflineIcon className="w-4 h-4 text-slate-400" /></span>}
                             </p>
                             <p className="text-slate-400">{userData.userId}</p>

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '@/api/lib/mysql';
+import { sql } from '@vercel/postgres';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
@@ -14,12 +14,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (completed) {
-            // Assumes a UNIQUE or PRIMARY KEY constraint on (user_id, task_id) in the 'progress' table.
-            const sql = `INSERT INTO progress (user_id, task_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE task_id = VALUES(task_id)`;
-            await pool.execute(sql, [userId, taskId]);
+            // Use ON CONFLICT to prevent duplicates, which is the PostgreSQL equivalent of ON DUPLICATE KEY UPDATE.
+            await sql`
+                INSERT INTO progress (user_id, task_id) 
+                VALUES (${userId}, ${taskId}) 
+                ON CONFLICT (user_id, task_id) DO NOTHING
+            `;
         } else {
-            const sql = `DELETE FROM progress WHERE user_id = ? AND task_id = ?`;
-            await pool.execute(sql, [userId, taskId]);
+            await sql`
+                DELETE FROM progress 
+                WHERE user_id = ${userId} AND task_id = ${taskId}
+            `;
         }
         
         return res.status(200).json({ message: 'Progress updated.' });

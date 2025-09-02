@@ -38,7 +38,6 @@ const setOfflineData = (data: OfflineDB) => {
     }
 };
 
-// Fix: Add deleteGuestData function needed for syncing guest progress to a real account.
 export const deleteGuestData = async (): Promise<void> => {
     const db = getOfflineData();
     delete db.users['GUEST'];
@@ -137,11 +136,10 @@ export const isUserIdTaken = async (userId: string, isOffline: boolean): Promise
             const { exists } = await response.json();
             return exists;
         }
-        // Fail safe for server errors
         throw new Error(`Server responded with ${response.status}`);
     } catch (error) {
         console.error('Error checking user ID:', error);
-        throw error; // Re-throw to be caught by the caller
+        throw error;
     }
 };
 

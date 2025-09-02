@@ -24,7 +24,6 @@ interface AppContextType {
     isLoading: boolean;
     theme: Theme;
     isOffline: boolean;
-    // Fix: Add guest-related properties to the context type.
     isGuest: boolean;
     loginAsGuest: () => Promise<void>;
     startGuestSync: () => void;
@@ -56,7 +55,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [progress, setProgress] = useState<Progress>({});
     const [notification, setNotification] = useState<{ message: string, id: number } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    // Fix: Add state for guest mode.
     const [isGuest, setIsGuest] = useState(false);
     const [isSyncingGuest, setIsSyncingGuest] = useState(false);
     const [theme, setTheme] = useState<Theme>(() => {
@@ -167,7 +165,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setProgress(newProgress);
         
-        // Fix: A guest's progress should always be saved offline.
         await apiService.updateProgress(userData.userId, taskId, completed, isGuest || isOffline);
     }, [progress, userData.userId, isGuest, isOffline]);
 
@@ -175,9 +172,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsLoading(true);
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        // Account creation must always be an online action to prevent creating
-        // local-only accounts that can't be synced or used elsewhere.
-        // The "Guest" mode serves the purpose of a local-only profile.
         const success = await apiService.createUser(newUserData, false);
         
         if (success) {
@@ -212,11 +206,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        // Login must always be an online action to fetch the authoritative user profile.
-        // The offline toggle should affect data syncing *after* login, not authentication itself.
         const data = await apiService.loadUser(userId, false);
         if (data) {
-            // Fix: Ensure isGuest is false when a regular user logs in.
             setIsGuest(false);
             setUserData({
                 ...initialUserData,
@@ -234,7 +225,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsLoading(false);
     };
     
-    // Fix: Add loginAsGuest function.
     const loginAsGuest = async () => {
         setIsLoading(true);
         const guestUserId = 'GUEST';
@@ -255,7 +245,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const updateUser = async (newData: { name: string, userClass: string, rollNumber: string }): Promise<boolean> => {
-        // Fix: Guest profiles cannot be updated.
         if (isGuest) {
             showNotification("Guest profile cannot be updated.");
             return false;
@@ -279,14 +268,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUserData(initialUserData);
         setProgress({});
         localStorage.removeItem('studygem_userid');
-        // Fix: Reset guest state on logout.
         setIsGuest(false);
         setIsSyncingGuest(false);
         setScreen('welcome');
         showNotification("You have been logged out.");
     };
 
-    // Fix: Add startGuestSync function.
     const startGuestSync = () => {
         setIsSyncingGuest(true);
         setScreen('onboarding');
@@ -340,7 +327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const screenTitle = useMemo(() => {
         switch (currentScreen) {
             case 'welcome': return '';
-            case 'onboarding': return 'Get Started';
+            case 'onboarding': return 'Create Account';
             case 'userid': return 'Your Study ID';
             case 'standard': return `Welcome, ${userData.name}!`;
             case 'exam': return 'Select Exam';

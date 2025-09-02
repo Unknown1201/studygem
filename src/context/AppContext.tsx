@@ -23,6 +23,9 @@ interface AppContextType {
     notification: { message: string, id: number } | null;
     isLoading: boolean;
     theme: Theme;
+    // Fix: Add isOffline and toggleOfflineMode to the context type to support offline functionality.
+    isOffline: boolean;
+    toggleOfflineMode: () => void;
     setScreen: (screen: Screen) => void;
     showNotification: (message: string) => void;
     createUser: (name: string, userClass: string, rollNumber: string, userId: string) => Promise<void>;
@@ -58,6 +61,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return 'dark';
     });
+    // Fix: Add isOffline state management and a toggle function for offline mode.
+    const [isOffline, setIsOffline] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('studygem_offline_mode') === 'true';
+        }
+        return false;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('studygem_offline_mode', String(isOffline));
+    }, [isOffline]);
+
+    const toggleOfflineMode = () => {
+        setIsOffline(prev => {
+            const newState = !prev;
+            if (newState) {
+                showNotification("Offline mode enabled. Data is saved locally.");
+            } else {
+                showNotification("Offline mode disabled. You are now online.");
+            }
+            return newState;
+        });
+    };
 
     useEffect(() => {
         if (theme === 'dark') {
@@ -139,14 +165,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setProgress(newProgress);
         
         // Send update to the backend
-        await apiService.updateProgress(userData.userId, taskId, completed);
-    }, [progress, userData.userId]);
+        // Fix: Pass the isOffline flag to the apiService function to fix argument mismatch.
+        await apiService.updateProgress(userData.userId, taskId, completed, isOffline);
+    }, [progress, userData.userId, isOffline]);
 
     const createUser = async (name: string, userClass: string, rollNumber: string, userId: string) => {
         setIsLoading(true);
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        const success = await apiService.createUser(newUserData);
+        // Fix: Pass the isOffline flag to the apiService function to fix argument mismatch.
+        const success = await apiService.createUser(newUserData, isOffline);
         
         if (success) {
             setUserData(newUserData);
@@ -165,7 +193,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        const data = await apiService.loadUser(userId);
+        // Fix: Pass the isOffline flag to the apiService function to fix argument mismatch.
+        const data = await apiService.loadUser(userId, isOffline);
         if (data) {
             setUserData({
                 ...initialUserData,
@@ -187,7 +216,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsLoading(true);
         const updatedUserData: UserData = { ...userData, name: newData.name, class: newData.userClass, rollNumber: newData.rollNumber };
         
-        const result = await apiService.updateUser(updatedUserData);
+        // Fix: Pass the isOffline flag to the apiService function.
+        const result = await apiService.updateUser(updatedUserData, isOffline);
         
         if (result.success) {
             setUserData(updatedUserData);
@@ -276,7 +306,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setScreen, showNotification, toggleTheme,
             createUser, loginUser, updateUser, logoutUser,
             selectStandard, selectExam, selectSubject, selectChapter,
-            goBack, toggleTask, getTaskId, isTaskCompleted, calculateProgress, generateRecoveryPDF
+            goBack, toggleTask, getTaskId, isTaskCompleted, calculateProgress, generateRecoveryPDF,
+            // Fix: Provide isOffline state and toggle function through the context.
+            isOffline, toggleOfflineMode,
         }}>
             {children}
         </AppContext.Provider>

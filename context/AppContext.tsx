@@ -23,12 +23,15 @@ interface AppContextType {
     notification: { message: string, id: number } | null;
     isLoading: boolean;
     theme: Theme;
+    isGuest: boolean;
     setScreen: (screen: Screen) => void;
     showNotification: (message: string) => void;
-    createUser: (name: string, userClass: string, rollNumber: string) => Promise<void>;
+    createUser: (name: string, userClass: string, rollNumber: string, userId: string) => Promise<void>;
     loginUser: (userId: string) => Promise<void>;
+    loginAsGuest: () => Promise<void>;
     updateUser: (newData: { name: string, userClass: string, rollNumber: string }) => Promise<boolean>;
     logoutUser: () => void;
+    startGuestSync: () => void;
     selectStandard: (standard: string) => void;
     selectExam: (exam: string) => void;
     selectSubject: (subject: string) => void;
@@ -50,10 +53,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [progress, setProgress] = useState<Progress>({});
     const [notification, setNotification] = useState<{ message: string, id: number } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isGuest, setIsGuest] = useState(false);
+    const [isSyncingGuest, setIsSyncingGuest] = useState(false);
     const [theme, setTheme] = useState<Theme>(() => {
         if (typeof window !== 'undefined') {
             const savedTheme = localStorage.getItem('studygem_theme');
-            // Default to dark for the new theme
             if (savedTheme === 'light') return 'light';
         }
         return 'dark';
@@ -79,31 +83,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const showNotification = (message: string) => {
         setNotification({ message, id: Date.now() });
     };
-
-    const generateUniqueId = async (name: string, userClass: string, roll: string): Promise<string> => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let id = '';
-        let isUnique = false;
-
-        while(!isUnique) {
-            const namePart = name.substring(0, 1).toUpperCase();
-            const classPart = userClass.replace(/[^A-Z0-9]/ig, '').slice(-1).toUpperCase();
-            const rollPart = roll.replace(/[^A-Z0-9]/ig, '').slice(-1).toUpperCase();
-            
-            let randomPart = '';
-            for (let i = 0; i < 2; i++) {
-                randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            
-            const combined = `${namePart}${classPart}${rollPart}${randomPart}`.padEnd(5, 'X');
-            id = `SG-${combined.slice(0,5)}`;
-            
-            const checkResult = await apiService.isUserIdTaken(id);
-            isUnique = !checkResult;
-        }
-        return id;
-    };
-
 
     const getTaskId = useCallback((task: string): string => {
         return `${userData.currentStandard}-${userData.currentExam}-${userData.currentSubject}-${userData.currentChapter}-${task}`;
@@ -154,7 +133,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [calculateExamProgress, calculateSubjectProgress, calculateChapterProgress]);
 
     const toggleTask = useCallback(async (taskId: string, completed: boolean) => {
-        // Optimistically update UI
         const newProgress = { ...progress };
         if (completed) {
             newProgress[taskId] = true;
@@ -163,24 +141,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setProgress(newProgress);
         
-        // Send update to the backend
-        await apiService.updateProgress(userData.userId, taskId, completed);
-    }, [progress, userData.userId]);
+        await apiService.updateProgress(userData.userId, taskId, completed, isGuest);
+    }, [progress, userData.userId, isGuest]);
 
-    const createUser = async (name: string, userClass: string, rollNumber: string) => {
+    const createUser = async (name: string, userClass: string, rollNumber: string, userId: string) => {
         setIsLoading(true);
-        const userId = await generateUniqueId(name, userClass, rollNumber);
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        const success = await apiService.createUser(newUserData);
+        const success = await apiService.createUser(newUserData, false);
         
         if (success) {
+            if (isSyncingGuest) {
+                showNotification("Account created! Syncing guest progress...");
+                const guestProgressData = await apiService.loadUser('GUEST', true);
+                if (guestProgressData && guestProgressData.progress) {
+                    const tasks = Object.keys(guestProgressData.progress);
+                    await Promise.all(tasks.map(taskId => 
+                        apiService.updateProgress(userId, taskId, true, false)
+                    ));
+                }
+                await apiService.deleteGuestData();
+                setIsSyncingGuest(false);
+                setIsGuest(false);
+                showNotification("Progress synced successfully!");
+            }
+
             setUserData(newUserData);
             setProgress({});
             localStorage.setItem('studygem_userid', userId);
             setScreen('userid');
         } else {
-            showNotification("Error: Could not create user.");
+            showNotification("Error: Could not create user. The ID might have been taken.");
         }
         setIsLoading(false);
     };
@@ -191,8 +182,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        const data = await apiService.loadUser(userId);
+        const data = await apiService.loadUser(userId, false);
         if (data) {
+            setIsGuest(false);
             setUserData({
                 ...initialUserData,
                 userId: data.userData.userId,
@@ -208,35 +200,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setIsLoading(false);
     };
+    
+    const loginAsGuest = async () => {
+        setIsLoading(true);
+        const guestUserId = 'GUEST';
+        
+        let data = await apiService.loadUser(guestUserId, true);
+        if (!data) {
+            const guestProfile = { userId: guestUserId, name: 'Guest', class: 'N/A', rollNumber: 'N/A' };
+            await apiService.createUser(guestProfile, true);
+            data = { userData: guestProfile, progress: {} };
+        }
+        
+        setUserData({ ...initialUserData, ...data.userData });
+        setProgress(data.progress || {});
+        setIsGuest(true);
+        setScreen('standard');
+        setIsLoading(false);
+        showNotification("Browsing as Guest. Progress is saved locally.");
+    };
 
     const updateUser = async (newData: { name: string, userClass: string, rollNumber: string }): Promise<boolean> => {
+        if (isGuest) return false;
         setIsLoading(true);
         const updatedUserData: UserData = { ...userData, name: newData.name, class: newData.userClass, rollNumber: newData.rollNumber };
         
-        const result = await apiService.updateUser(updatedUserData);
+        const result = await apiService.updateUser(updatedUserData, false);
         
         if (result.success) {
             setUserData(updatedUserData);
             showNotification("Profile updated successfully!");
-            setIsLoading(false);
-            return true;
         } else {
             showNotification(result.message || "An error occurred.");
-            setIsLoading(false);
-            return false;
         }
+        setIsLoading(false);
+        return result.success;
     };
 
     const logoutUser = () => {
         setUserData(initialUserData);
         setProgress({});
         localStorage.removeItem('studygem_userid');
+        setIsGuest(false);
+        setIsSyncingGuest(false);
         setScreen('welcome');
         showNotification("You have been logged out.");
     };
 
+    const startGuestSync = () => {
+        setIsSyncingGuest(true);
+        setScreen('onboarding');
+    };
+
     useEffect(() => {
-        const checkCookie = async () => {
+        const checkUserId = async () => {
             const userId = localStorage.getItem('studygem_userid');
             if (userId) {
                 await loginUser(userId);
@@ -244,7 +261,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setIsLoading(false);
             }
         };
-        checkCookie();
+        checkUserId();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -276,14 +293,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'task': setScreen('chapter'); break;
             case 'userid': setScreen('onboarding'); break;
             case 'profile': setScreen('standard'); break;
-            default: break; // Welcome screen has no back
+            default: break;
         }
     };
     
     const screenTitle = useMemo(() => {
         switch (currentScreen) {
             case 'welcome': return '';
-            case 'onboarding': return 'Get Started';
+            case 'onboarding': return 'Create Account';
             case 'userid': return 'Your Study ID';
             case 'standard': return `Welcome, ${userData.name}!`;
             case 'exam': return 'Select Exam';
@@ -295,12 +312,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [currentScreen, userData]);
 
-
     return (
         <AppContext.Provider value={{
-            currentScreen, screenTitle, userData, progress, notification, isLoading, theme,
+            currentScreen, screenTitle, userData, progress, notification, isLoading, theme, isGuest,
             setScreen, showNotification, toggleTheme,
-            createUser, loginUser, updateUser, logoutUser,
+            createUser, loginUser, loginAsGuest, updateUser, logoutUser, startGuestSync,
             selectStandard, selectExam, selectSubject, selectChapter,
             goBack, toggleTask, getTaskId, isTaskCompleted, calculateProgress, generateRecoveryPDF
         }}>

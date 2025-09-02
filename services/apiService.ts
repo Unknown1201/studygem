@@ -12,9 +12,54 @@ interface UpdateResult {
     message?: string;
 }
 
-// Replaces the old mock implementation with fetch calls to the new Vercel serverless API.
+// --- Offline Mode Logic ---
 
-export const createUser = async (userData: UserProfile): Promise<boolean> => {
+const OFFLINE_DB_KEY = 'studygem_offline_data';
+
+interface OfflineDB {
+    users: { [userId: string]: UserProfile };
+    progress: { [userId: string]: Progress };
+}
+
+const getOfflineData = (): OfflineDB => {
+    try {
+        const data = localStorage.getItem(OFFLINE_DB_KEY);
+        return data ? JSON.parse(data) : { users: {}, progress: {} };
+    } catch {
+        return { users: {}, progress: {} };
+    }
+};
+
+const setOfflineData = (data: OfflineDB) => {
+    try {
+        localStorage.setItem(OFFLINE_DB_KEY, JSON.stringify(data));
+    } catch (error) {
+        console.error("Failed to save offline data:", error);
+    }
+};
+
+export const deleteGuestData = async (): Promise<void> => {
+    const db = getOfflineData();
+    delete db.users['GUEST'];
+    delete db.progress['GUEST'];
+    setOfflineData(db);
+};
+
+// --- API Service Functions ---
+
+export const createUser = async (userData: UserProfile, isOffline: boolean): Promise<boolean> => {
+    if (isOffline) {
+        const db = getOfflineData();
+        if (db.users[userData.userId]) {
+            console.error('Offline user creation failed: ID already exists');
+            return false;
+        }
+        db.users[userData.userId] = userData;
+        db.progress[userData.userId] = {}; // Initialize progress
+        setOfflineData(db);
+        return true;
+    }
+
     try {
         const response = await fetch('/api/user/create', {
             method: 'POST',
@@ -28,7 +73,17 @@ export const createUser = async (userData: UserProfile): Promise<boolean> => {
     }
 };
 
-export const loadUser = async (userId: string): Promise<LoadUserResponse | null> => {
+export const loadUser = async (userId: string, isOffline: boolean): Promise<LoadUserResponse | null> => {
+     if (isOffline) {
+        const db = getOfflineData();
+        const userData = db.users[userId];
+        const progress = db.progress[userId];
+        if (userData) {
+            return { userData, progress: progress || {} };
+        }
+        return null;
+    }
+
     try {
         const response = await fetch(`/api/user/${userId}`);
         if (response.ok) {
@@ -41,7 +96,17 @@ export const loadUser = async (userId: string): Promise<LoadUserResponse | null>
     }
 };
 
-export const updateUser = async (userData: UserProfile): Promise<UpdateResult> => {
+export const updateUser = async (userData: UserProfile, isOffline: boolean): Promise<UpdateResult> => {
+    if (isOffline) {
+        const db = getOfflineData();
+        if (!db.users[userData.userId]) {
+            return { success: false, message: "User not found locally." };
+        }
+        db.users[userData.userId] = userData;
+        setOfflineData(db);
+        return { success: true };
+    }
+
     try {
         const response = await fetch(`/api/user/${userData.userId}`, {
             method: 'PUT',
@@ -59,21 +124,40 @@ export const updateUser = async (userData: UserProfile): Promise<UpdateResult> =
     }
 };
 
-export const isUserIdTaken = async (userId: string): Promise<boolean> => {
+export const isUserIdTaken = async (userId: string, isOffline: boolean): Promise<boolean> => {
+    if (isOffline) {
+        const db = getOfflineData();
+        return !!db.users[userId];
+    }
+    
     try {
         const response = await fetch(`/api/user/exists/${userId}`);
         if (response.ok) {
             const { exists } = await response.json();
             return exists;
         }
-        return true; // Fail safe
+        throw new Error(`Server responded with ${response.status}`);
     } catch (error) {
         console.error('Error checking user ID:', error);
-        return true; // Fail safe
+        throw error;
     }
 };
 
-export const updateProgress = async (userId: string, taskId: string, completed: boolean): Promise<boolean> => {
+export const updateProgress = async (userId: string, taskId: string, completed: boolean, isOffline: boolean): Promise<boolean> => {
+    if (isOffline) {
+        const db = getOfflineData();
+        if (!db.progress[userId]) {
+            db.progress[userId] = {};
+        }
+        if (completed) {
+            db.progress[userId][taskId] = true;
+        } else {
+            delete db.progress[userId][taskId];
+        }
+        setOfflineData(db);
+        return true;
+    }
+
     try {
         const response = await fetch('/api/progress/update', {
             method: 'POST',

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import Button from '../ui/Button';
 import { useAppContext } from '../../hooks/useAppContext';
-import { LoaderIcon, ArrowRightIcon } from '../ui/icons';
+import { LoaderIcon, ArrowRightIcon, CheckIcon } from '../ui/icons';
+import * as apiService from '../../services/apiService';
 
 const OnboardingScreen: React.FC = () => {
     const [mode, setMode] = useState<'new' | 'login'>('new');
@@ -10,20 +11,62 @@ const OnboardingScreen: React.FC = () => {
     const [userClass, setUserClass] = useState('');
     const [rollNumber, setRollNumber] = useState('');
     const [loginId, setLoginId] = useState('');
+    const [userId, setUserId] = useState('');
+    const [idStatus, setIdStatus] = useState<'idle' | 'checking' | 'taken' | 'available' | 'invalid'>('idle');
+    const [idError, setIdError] = useState('');
     const { createUser, loginUser, isLoading } = useAppContext();
 
-    const handleNextStep = () => {
+    const handleStep1Next = () => {
         if (name.trim().length >= 2) {
             setStep(2);
         }
     };
-
-    const handleCreateUser = () => {
-        if (userClass.trim() && rollNumber.trim() && !isLoading) {
-            createUser(name.trim(), userClass.trim(), rollNumber.trim());
+    
+    const handleStep2Next = () => {
+        if (userClass.trim() && rollNumber.trim()) {
+            setStep(3);
         }
     };
-    
+
+    const validateAndCheckId = async (id: string) => {
+        if (!id) return;
+        setUserId(id.toUpperCase());
+        setIdStatus('checking');
+        setIdError('');
+
+        if (id.length < 5 || id.length > 15) {
+            setIdStatus('invalid');
+            setIdError('ID must be 5-15 characters long.');
+            return;
+        }
+
+        if (!/^[A-Z0-9]+$/.test(id.toUpperCase())) {
+            setIdStatus('invalid');
+            setIdError('ID can only contain letters and numbers.');
+            return;
+        }
+
+        try {
+            const isTaken = await apiService.isUserIdTaken(id.toUpperCase(), false);
+            if (isTaken) {
+                setIdStatus('taken');
+                setIdError('This ID is already taken.');
+            } else {
+                setIdStatus('available');
+                setIdError('');
+            }
+        } catch {
+             setIdStatus('invalid');
+             setIdError('Could not check ID. Check network and try again.');
+        }
+    };
+
+    const handleCreateUser = () => {
+        if (idStatus === 'available' && !isLoading) {
+            createUser(name.trim(), userClass.trim(), rollNumber.trim(), userId);
+        }
+    };
+
     const handleLoginSubmit = () => {
         if (loginId.trim() && !isLoading) {
             loginUser(loginId.trim().toUpperCase());
@@ -41,12 +84,12 @@ const OnboardingScreen: React.FC = () => {
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleNextStep()}
+                        onKeyPress={(e) => e.key === 'Enter' && handleStep1Next()}
                         placeholder="Enter your name"
                         className={inputClasses}
                         autoFocus
                     />
-                    <Button onClick={handleNextStep} disabled={name.trim().length < 2}>
+                    <Button onClick={handleStep1Next} disabled={name.trim().length < 2}>
                         Next <ArrowRightIcon className="w-5 h-5 ml-2" />
                     </Button>
                 </div>
@@ -66,14 +109,46 @@ const OnboardingScreen: React.FC = () => {
                         type="text"
                         value={rollNumber}
                         onChange={(e) => setRollNumber(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleCreateUser()}
+                        onKeyPress={(e) => e.key === 'Enter' && handleStep2Next()}
                         placeholder="Your Roll Number"
                         className={inputClasses}
                     />
-                    <Button onClick={handleCreateUser} disabled={!userClass.trim() || !rollNumber.trim() || isLoading}>
-                        {isLoading ? <LoaderIcon /> : 'Create My Account'}
+                    <Button onClick={handleStep2Next} disabled={!userClass.trim() || !rollNumber.trim()}>
+                        Next <ArrowRightIcon className="w-5 h-5 ml-2" />
                     </Button>
                     <Button variant="secondary" onClick={() => setStep(1)}>Go Back</Button>
+                </div>
+            )}
+            {step === 3 && (
+                 <div className="space-y-4 animate-fade-in">
+                    <h2 className="text-2xl font-bold text-white text-center">Choose your Study ID</h2>
+                     <p className="text-sm text-slate-400 text-center px-2">This is your unique login. 5-15 letters & numbers.</p>
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={userId}
+                            onChange={(e) => {
+                                const newId = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                                setUserId(newId);
+                                setIdStatus('idle');
+                                setIdError('');
+                            }}
+                            onBlur={() => validateAndCheckId(userId)}
+                            placeholder="MYCOOLID123"
+                            className={`${inputClasses} uppercase text-center tracking-widest font-mono`}
+                            maxLength={15}
+                            autoFocus
+                        />
+                         <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                            {idStatus === 'checking' && <LoaderIcon className="w-5 h-5" />}
+                            {idStatus === 'available' && <CheckIcon className="w-5 h-5 text-green-400" />}
+                        </div>
+                    </div>
+                     {idError && <p className="text-red-400 text-xs text-center -mt-2">{idError}</p>}
+                    <Button onClick={handleCreateUser} disabled={idStatus !== 'available' || isLoading}>
+                        {isLoading ? <LoaderIcon /> : 'Create My Account'}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setStep(2)}>Go Back</Button>
                 </div>
             )}
         </div>
@@ -87,7 +162,7 @@ const OnboardingScreen: React.FC = () => {
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleLoginSubmit()}
-                placeholder="SG-XXXXX"
+                placeholder="YOUR-STUDY-ID"
                 className={`${inputClasses} uppercase text-center tracking-widest font-mono`}
                 autoFocus
             />

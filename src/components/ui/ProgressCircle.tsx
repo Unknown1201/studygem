@@ -27,16 +27,16 @@ const ProgressCircle: React.FC<ProgressCircleProps> = ({ progress }) => {
                         tick={false}
                     />
                     <RadialBar
-                        background={{ fill: '#E5E5EA' }} /* ios-tertiary-gray */
+                        background={{ fill: 'rgba(229, 229, 234, 0.5)' }} 
                         dataKey="value"
                         cornerRadius={6}
-                        fill="#007AFF" /* ios-blue */
+                        fill="rgb(0, 122, 255)"
                     />
                 </RadialBarChart>
             </ResponsiveContainer>
              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold text-ios-primary-text tracking-tighter">{progress}<span className="text-2xl font-medium text-ios-secondary-text">%</span></span>
-                <span className="text-sm text-ios-secondary-text font-medium uppercase tracking-widest">Complete</span>
+                <span className="text-4xl font-bold tracking-tighter text-slate-800 dark:text-slate-100">{progress}<span className="text-2xl font-medium text-slate-500 dark:text-slate-400">%</span></span>
+                <span className="text-sm font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">Complete</span>
             </div>
         </div>
     );

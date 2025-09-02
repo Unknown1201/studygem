@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
-import { CloudOfflineIcon, GemIcon, HomeIcon, LogoutIcon, UserIcon } from './icons';
+import { GemIcon, HomeIcon, LogoutIcon, UserIcon, CloudOfflineIcon } from './icons';
 import ThemeToggle from './ThemeToggle';
 
 const Sidebar: React.FC = () => {

@@ -57,7 +57,7 @@ const OnboardingScreen: React.FC = () => {
             }
         } catch {
              setIdStatus('invalid');
-             setIdError('Could not check ID. Please try again.');
+             setIdError('Could not check ID. Check network and try again.');
         }
     };
 

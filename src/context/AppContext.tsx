@@ -23,7 +23,6 @@ interface AppContextType {
     notification: { message: string, id: number } | null;
     isLoading: boolean;
     theme: Theme;
-    isOffline: boolean;
     setScreen: (screen: Screen) => void;
     showNotification: (message: string) => void;
     createUser: (name: string, userClass: string, rollNumber: string, userId: string) => Promise<void>;
@@ -41,7 +40,6 @@ interface AppContextType {
     calculateProgress: (level: 'exam' | 'subject' | 'chapter', identifiers: { standard: string; exam: string; subject?: string; chapter?: string }) => number;
     generateRecoveryPDF: () => void;
     toggleTheme: () => void;
-    toggleOfflineMode: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -55,15 +53,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [theme, setTheme] = useState<Theme>(() => {
         if (typeof window !== 'undefined') {
             const savedTheme = localStorage.getItem('studygem_theme');
+            // Default to dark for the new theme
             if (savedTheme === 'light') return 'light';
         }
         return 'dark';
-    });
-    const [isOffline, setIsOffline] = useState<boolean>(() => {
-        if (typeof window !== 'undefined') {
-            return localStorage.getItem('studygem_offline_mode') === 'true';
-        }
-        return false;
     });
 
     useEffect(() => {
@@ -77,17 +70,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const toggleTheme = () => {
         setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-    };
-
-    const toggleOfflineMode = () => {
-        const newOfflineState = !isOffline;
-        setIsOffline(newOfflineState);
-        localStorage.setItem('studygem_offline_mode', String(newOfflineState));
-        showNotification(newOfflineState ? "Offline mode enabled." : "Offline mode disabled. Syncing with server.");
-        if (!newOfflineState && userData.userId) {
-            // Optional: Add logic here to sync local changes to the server when going online.
-            // For now, it just switches the mode for future actions.
-        }
     };
 
     const setScreen = (screen: Screen) => {
@@ -147,6 +129,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [calculateExamProgress, calculateSubjectProgress, calculateChapterProgress]);
 
     const toggleTask = useCallback(async (taskId: string, completed: boolean) => {
+        // Optimistically update UI
         const newProgress = { ...progress };
         if (completed) {
             newProgress[taskId] = true;
@@ -155,21 +138,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setProgress(newProgress);
         
-        await apiService.updateProgress(userData.userId, taskId, completed, isOffline);
-    }, [progress, userData.userId, isOffline]);
+        // Send update to the backend
+        await apiService.updateProgress(userData.userId, taskId, completed);
+    }, [progress, userData.userId]);
 
     const createUser = async (name: string, userClass: string, rollNumber: string, userId: string) => {
         setIsLoading(true);
         const newUserData = { ...initialUserData, userId, name, class: userClass, rollNumber };
         
-        const success = await apiService.createUser(newUserData, isOffline);
+        const success = await apiService.createUser(newUserData);
         
         if (success) {
             setUserData(newUserData);
             setProgress({});
-            if (!isOffline) {
-                 localStorage.setItem('studygem_userid', userId);
-            }
+            localStorage.setItem('studygem_userid', userId);
             setScreen('userid');
         } else {
             showNotification("Error: Could not create user. The ID might have been taken.");
@@ -183,7 +165,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loginUser = async (userId: string) => {
         setIsLoading(true);
-        const data = await apiService.loadUser(userId, isOffline);
+        const data = await apiService.loadUser(userId);
         if (data) {
             setUserData({
                 ...initialUserData,
@@ -193,12 +175,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 rollNumber: data.userData.rollNumber,
             });
             setProgress(data.progress || {});
-            if (!isOffline) {
-                localStorage.setItem('studygem_userid', data.userData.userId);
-            }
+            localStorage.setItem('studygem_userid', data.userData.userId);
             setScreen('standard');
         } else {
-            showNotification(isOffline ? "Could not find Study ID in local data." : "Invalid Study ID. Please try again.");
+            showNotification("Invalid Study ID. Please try again.");
         }
         setIsLoading(false);
     };
@@ -207,7 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsLoading(true);
         const updatedUserData: UserData = { ...userData, name: newData.name, class: newData.userClass, rollNumber: newData.rollNumber };
         
-        const result = await apiService.updateUser(updatedUserData, isOffline);
+        const result = await apiService.updateUser(updatedUserData);
         
         if (result.success) {
             setUserData(updatedUserData);
@@ -230,13 +210,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     useEffect(() => {
-        const checkLogin = async () => {
-            if (isOffline) {
-                // In offline mode, don't auto-login from a potentially stale cookie.
-                // User must manually "login" with their ID to load local data.
-                setIsLoading(false);
-                return;
-            }
+        const checkCookie = async () => {
             const userId = localStorage.getItem('studygem_userid');
             if (userId) {
                 await loginUser(userId);
@@ -244,7 +218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setIsLoading(false);
             }
         };
-        checkLogin();
+        checkCookie();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -276,7 +250,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'task': setScreen('chapter'); break;
             case 'userid': setScreen('onboarding'); break;
             case 'profile': setScreen('standard'); break;
-            default: break;
+            default: break; // Welcome screen has no back
         }
     };
     
@@ -298,8 +272,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return (
         <AppContext.Provider value={{
-            currentScreen, screenTitle, userData, progress, notification, isLoading, theme, isOffline,
-            setScreen, showNotification, toggleTheme, toggleOfflineMode,
+            currentScreen, screenTitle, userData, progress, notification, isLoading, theme,
+            setScreen, showNotification, toggleTheme,
             createUser, loginUser, updateUser, logoutUser,
             selectStandard, selectExam, selectSubject, selectChapter,
             goBack, toggleTask, getTaskId, isTaskCompleted, calculateProgress, generateRecoveryPDF

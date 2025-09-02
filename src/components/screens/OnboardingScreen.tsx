@@ -14,7 +14,7 @@ const OnboardingScreen: React.FC = () => {
     const [userId, setUserId] = useState('');
     const [idStatus, setIdStatus] = useState<'idle' | 'checking' | 'taken' | 'available' | 'invalid'>('idle');
     const [idError, setIdError] = useState('');
-    const { createUser, loginUser, isLoading, isOffline } = useAppContext();
+    const { createUser, loginUser, isLoading } = useAppContext();
 
     const handleStep1Next = () => {
         if (name.trim().length >= 2) {
@@ -47,7 +47,7 @@ const OnboardingScreen: React.FC = () => {
         }
 
         try {
-            const isTaken = await apiService.isUserIdTaken(id.toUpperCase(), isOffline);
+            const isTaken = await apiService.isUserIdTaken(id.toUpperCase());
             if (isTaken) {
                 setIdStatus('taken');
                 setIdError('This ID is already taken.');

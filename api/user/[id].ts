@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '../lib/mysql';
+import pool from '@/api/lib/mysql';
 
 async function handleGet(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query;
